@@ -1,0 +1,29 @@
+好的，根据您提供的源代码和分析，以下是与 YourAM SRAM 编译器地址分布策略、Multi-Core 及 Multi-Bank 支持相关的关键代码片段及其说明：
+
+1.  **文件: `YouRAM-master\src\circuit\module\sram.rs`**
+    *   **行号: 194 - 221**
+    *   **说明:** 定义了 `AddressDistribution` 结构体及其 `new` 方法。`new` 方法是地址分布的核心逻辑入口，它尝试为给定的 `address_width` 和 `word_width` 找到合适的 `core_address_width`, `row_address_width`, 和 `column_address_width`。它通过调用 `Self::try_one_core` 来实现，并遵循 `core_address_width` 优先的策略。
+
+2.  **文件: `YouRAM-master\src\circuit\module\sram.rs`**
+    *   **行号: 222 - 251**
+    *   **说明:** `AddressDistribution` 的 `try_one_core` 方法。该方法针对一个核心（Core）内部进行地址划分。它遍历可能的 `column_address_width`，计算对应的 `row`（行数）和 `col`（列数 = `word_width` * 2^`col_addr_width`），并尝试找到使 `|row - col|` 最小的配置（即阵列最接近方形，以平衡负载）。然后检查该配置是否满足 `Core` 的最大尺寸限制（`Core::MAX_ROW_SIZE` 和 `Core::MAX_COLUMN_SIZE`）。
+
+3.  **文件: `YouRAM-master\src\circuit\module\sram.rs`**
+    *   **行号: 165 - 171**
+    *   **说明:** `Sram` 结构体中的 `multiple_core` 方法。该方法通过检查 `core_address_width` 是否大于 0 来判断是否需要创建多个 `Core` 模块。这与 `AddressDistribution` 的逻辑直接关联，确认了 `core_address_width` 是控制 Multi-Core 生成的关键。
+
+4.  **文件: `YouRAM-master\src\circuit\module\sram.rs`**
+    *   **行号: 88 - 160**
+    *   **说明:** `Sram::build` 方法的一部分，具体实现了 Multi-Core 的结构。当 `multiple_core()` 为真时，它会创建一个 `CoreSelector` 模块，并实例化多个 `Core` 模块。`CoreSelector` 负责根据地址的高位（Core Address 部分）选择哪个 `Core` 的输出（`dout_core`）连接到最终的 `data_output`。所有 `Core` 共享相同的输入（地址、控制、写数据），但只选择一个 `Core` 的输出。
+
+5.  **文件: `YouRAM-master\src\circuit\module\core.rs`**
+    *   **行号: 32 - 104**
+    *   **说明:** `Core::build` 方法。`Core` 模块本身包含了 Bank、ControlLogic、AndArray 等子模块，是 SRAM 功能的核心单元。Multi-Core 策略是实例化多个这样的 `Core`，而不是在 `Core` 内部实现类似 Multi-Bank 的独立访问结构。
+
+6.  **文件: `YouRAM-master\src\circuit\module\sram.rs`**
+    *   **行号: 32 - 35, 191 - 193**
+    *   **说明:** `Sram` 模块的常量定义，如 `MAX_CORE_ADDRESS_WIDTH`（限制为 2，意味着最多 4 个 Core）。`core_row_size` 和 `core_column_sel_size` 方法也基于 `AddressDistribution` 的结果计算每个 Core 内部的行数和列选择线数量。
+
+7.  **文件: `YouRAM-master\src\circuit\module\bank.rs`**
+    *   **行号: 30 - 125**
+    *   **说明:** `Bank::build` 方法。虽然 Bank 内部有 DataPath、PrechargeArray 等，但其 `build` 方法并未体现传统 Multi-Bank 所需的独立地址译码或独立访问控制逻辑。YourAM 的 Bank 更像是 Core 内部的一个固定组成部分，而不是一个可独立配置的、具有完整接口的单元。这进一步印证了 YourAM 主要通过 Multi-Core（逻辑分片）而非 Multi-Bank（物理分块）来扩展容量。
